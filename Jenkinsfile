@@ -6,14 +6,7 @@ pipeline {
       maven 'maven-3.8.6'
       jdk 'java-11'
     }
-environment {
-        AWS_ACCOUNT_ID="053334083296"
-        AWS_DEFAULT_REGION="us-east-1"
-        IMAGE_REPO_NAME="sudipwadikar"
-        IMAGE_TAG="springtest"
-        REPOSITORY_URI = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${IMAGE_REPO_NAME}"
-}
-  stages {	
+stages {	
        stage('checkout') {
             steps {
                 checkout([$class: 'GitSCM', branches: [[name: '*/main']], extensions: [], userRemoteConfigs: [[url: 'https://github.com/sudipwadikar/awsk8tf.git']]])
@@ -25,6 +18,18 @@ environment {
                 sh ("terraform init");  
             }
         }
+	  
+	stage("Terraform plan") {
+            steps{
+                sh ("terraform plan");  
+            }
+        }  
+	 
+	stage("Terraform apply") {
+            steps{
+                sh ("terraform apply -auto-approve");  
+            }
+        } 
 	  
 	  /*stage ('K8S Deploy'){
                     //sh 'kubectl apply -f spring-boot.yaml'
