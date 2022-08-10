@@ -1,0 +1,148 @@
+def mvn
+def buildInfo
+pipeline {
+  agent any
+    tools {
+      maven 'maven-3.8.6'
+      jdk 'java-11'
+    }
+environment {
+        AWS_ACCOUNT_ID="053334083296"
+        AWS_DEFAULT_REGION="us-east-1"
+        IMAGE_REPO_NAME="sudipwadikar"
+        IMAGE_TAG="springtest"
+        REPOSITORY_URI = "${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${IMAGE_REPO_NAME}"
+}
+  stages {
+	/*stage('Submit Stack') {
+            steps {
+            //sh "aws cloudformation create-stack --stack-name ec2sg --template-body file://ec2sg.yaml --region 'us-east-1'"
+	    sh "aws cloudformation create-stack --stack-name arch --template-body file://3tier.yaml --region 'us-east-1'"    
+	    //sh "aws cloudformation delete-stack --stack-name arch --region 'us-east-1'"
+            //sh "aws cloudformation delete-stack --stack-name ec2sg --region 'us-east-1'"
+              }
+             }*/	  
+    stage('Execute_Maven') {
+	  steps {
+	    script {
+		  sh 'mvn clean package'
+        }			                      
+      }
+    }	
+    /* stage('Server'){
+	  steps{
+	  rtServer (
+		id: "Artifactory",
+		url: 'http://50.17.169.114:8082/artifactory',
+		username: 'admin',
+		password: 'Welcome1$',
+		bypassProxy: true,
+		timeout: 300		  
+	  )
+	}
+    }
+	  stage('Upload'){
+		  steps{
+		  rtUpload (
+		  serverId:"Artifactory",
+			  spec: '''{
+			  "files":[
+			  {
+			  "pattern":"*.war",
+			  "target": "helloworld-libs-snapshot"
+			  }
+			  ]
+			  }''',
+		  )
+		  }
+	  }
+	  stage ('Publish Build Info') {
+		  steps {
+		  	rtPublishBuildInfo (
+			 serverId:"Artifactory"
+			)
+		  }
+	  }*/
+	  
+	  
+    stage('Test_Maven') {
+	    steps {
+		  sh 'mvn test'			                     
+	    }
+	    post {
+                always {                                                 
+			 junit '**/target/surefire-reports/TEST-*.xml'
+               }
+              }
+	   }
+	/*  
+	stage('SonarQube_Analysis'){
+            steps{
+                script{
+                withSonarQubeEnv(installationName: 'sonar-9.5', credentialsId: 'Jenkins-sonar-token'){
+                sh 'mvn sonar:sonar'        
+                }
+                }
+            }
+        }
+	stage('Quality_Gate') {
+	  steps {
+	    timeout(time: 2, unit: 'MINUTES') {
+		  waitForQualityGate abortPipeline: true
+        }
+      }
+    }
+   stage('Deleting docker images and Containers'){
+    steps{
+     sh 'chmod +x delete_cont.sh'
+     sh './delete_cont.sh'	      
+    }
+  }*/
+  stage('Building image') {
+	  steps{
+          sh 'docker build -t sudipwadikar/springtest:$BUILD_NUMBER .'
+      }
+  }	  
+  stage('Docker Container'){
+    steps{
+      withCredentials([usernamePassword(credentialsId: 'docker', passwordVariable: 'docker_pass', usernameVariable: 'docker_user')]) {
+	  sh 'docker login -u ${docker_user} -p ${docker_pass}'
+	  sh 'docker run -d -p 8050:8050 --name SpringbootApp sudipwadikar/springtest:$BUILD_NUMBER'
+	  sh "docker push sudipwadikar/springtest:$BUILD_NUMBER"	    
+	  }
+    }
+  }
+  /*stage('Logging into AWS ECR') {
+            steps {
+                script {
+                sh "aws ecr get-login-password --region ${AWS_DEFAULT_REGION} | docker login --username AWS --password-stdin ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com"
+                }
+            }
+        } 
+  // Uploading Docker images into AWS ECR
+    stage('Pushing to ECR') {
+     steps{
+	      withCredentials([usernamePassword(credentialsId: 'docker', passwordVariable: 'docker_pass', usernameVariable: 'docker_user')]){
+		 sh "docker tag sudipwadikar/springtest:$BUILD_NUMBER ${REPOSITORY_URI}:$IMAGE_TAG"
+		 //sh "aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin 053334083296.dkr.ecr.us-east-1.amazonaws.com"     
+                 sh "docker push ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${IMAGE_REPO_NAME}:${IMAGE_TAG}"
+		//sh 'docker login -u ${docker_user} -p ${docker_pass}'       
+		//sh "docker push sudipwadikar/springtest:$BUILD_NUMBER"	 
+         }
+        }
+      }	 */
+    stage ('K8S Deploy'){
+                    //sh 'kubectl apply -f spring-boot.yaml'
+	           sh 'kubectl create -f voting-app-deploy.yaml'
+		   sh 'kubectl create -f voting-app-service.yaml'
+		   sh 'kubectl create -f redis-deploy.yaml'
+		   sh 'kubectl create -f redis-service.yaml'
+		   sh 'kubectl create -f postgres-deploy.yaml'
+		   sh 'kubectl create -f postgres-service.yaml'
+		   sh 'kubectl create -f worker-app-deploy.yaml'
+		   sh 'kubectl create -f result-app-deploy.yaml'
+		   sh 'kubectl create -f result-app-service.yaml'
+      } 
+       }	  
+  }	  	  
+}
